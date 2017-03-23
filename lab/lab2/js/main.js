@@ -126,9 +126,17 @@ var state = {
 /* We'll use underscore's `once` function to make sure this only happens
  *  one time even if weupdate the position later
  */
+
+var myOrigin;
+var myLocations;
 var goToOrigin = _.once(function(lat, lng) {
   map.flyTo([lat, lng], 14);
+  myOrigin = [lat,lng];
+  myLocations = [{"lat": myOrigin[0], "lon": myOrigin[1]}];
+  // console.log(myLocations);
 });
+
+
 
 
 /* Given a lat and a long, we should create a marker, store it
@@ -142,34 +150,69 @@ var updatePosition = function(lat, lng, updated) {
   goToOrigin(lat, lng);
 };
 
+/* Every time a key is lifted while typing in the #dest input, disable
+ * the #calculate button if no text is in the input
+ */
+$('#dest').keyup(function(e) {
+  if ($('#dest').val().length === 0) {
+    $('#calculate').attr('disabled', true);
+  } else {
+    $('#calculate').attr('disabled', false);
+  }
+});
+
+
+var parseData = function(myData){
+  return JSON.parse(myData);
+};
+var parse;
+var geocoding;
+var routeResponse;
+var rouCoordinates;
+var myCoordinates;
+
 $(document).ready(function() {
   /* This 'if' check allows us to safely ask for the user's current position */
   if ("geolocation" in navigator) {
     navigator.geolocation.getCurrentPosition(function(position) {
       updatePosition(position.coords.latitude, position.coords.longitude, position.timestamp);
+      // click handler for the "calculate" button (probably you want to do something with this)
+      $("#calculate").click(function(e) {
+        var dest = $('#dest').val();
+        // console.log(dest);
+        // myURL = "https://search.mapzen.com/v1/search?text=" + dest + "&boundary.rect.min_lat=39.867004&boundary.rect.min_lon=-75.280303&boundary.rect.max_lat=40.137992&boundary.rect.max_lon=-74.955763&api_key=mapzen-bE4GcSs";
+        // myURL = "https://search.mapzen.com/v1/search?text=" + dest + "&boundary.rect.min_lat=38.75&boundary.rect.min_lon=-80.52&boundary.rect.max_lat=42.74&boundary.rect.max_lon=-72.95&size=3&api_key=mapzen-bE4GcSs";
+        // myURL = "https://search.mapzen.com/v1/search?text=" + dest + "&boundary.country=USA&size=3&api_key=mapzen-bE4GcSs";
+        myURL = "https://search.mapzen.com/v1/search?text=" + dest +  "&boundary.circle.lon=" + myOrigin[1] + "&boundary.circle.lat=" + myOrigin[0] + "&boundary.circle.radius=50&api_key=mapzen-bE4GcSs";
+        geocoding = $.ajax(myURL);
+        geocoding.done(function(data){
+          // console.log(myLocations);
+          // console.log(data);
+          // console.log(data.features);
+          myLocations.push({"lat":data.features[0].geometry.coordinates[1],"lon":data.features[0].geometry.coordinates[0]});
+          var myObject = {
+            "locations": myLocations,
+            "costing":"auto",
+            "directions_options":{"units":"miles"}
+          };
+          var myJSON = JSON.stringify(myObject);
+          var myNewURL =
+          "https://matrix.mapzen.com/optimized_route?json=" + myJSON + "&api_key=mapzen-bE4GcSs";
+          // console.log(myNewURL);
+          routeResponse = $.ajax(myNewURL);
+          routeResponse.done(function(data){
+            // console.log(data);
+            rouCoordinates = data.trip.legs[0].shape;
+            // console.log(rouCoordinates);
+            myCoordinates = decode(rouCoordinates);
+            // console.log(myCoordinates);
+            var myRoute = L.polyline(myCoordinates, {color: '#f4d142'}).addTo(map);
+          });
+
+        });
+      });
     });
   } else {
     alert("Unable to access geolocation API!");
   }
-
-
-  /* Every time a key is lifted while typing in the #dest input, disable
-   * the #calculate button if no text is in the input
-   */
-  $('#dest').keyup(function(e) {
-    if ($('#dest').val().length === 0) {
-      $('#calculate').attr('disabled', true);
-    } else {
-      $('#calculate').attr('disabled', false);
-    }
-  });
-
-  // click handler for the "calculate" button (probably you want to do something with this)
-  $("#calculate").click(function(e) {
-    var dest = $('#dest').val();
-    console.log(dest);
-  });
-
 });
-
-
